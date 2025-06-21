@@ -139,6 +139,7 @@ const RightSoleScreen: React.FC = () => {
     setIsRecording(true);
     setTestCompleted(false);
     setPressureData([]);
+    setAveragePressures(Array(8).fill(0)); // Reset averages
     setConsoleLog(prev => [...prev, '[INFO] Starting 20-second measurement...']);
     setConsoleLog(prev => [...prev, '[INFO] Please stand still on the pressure sensors']);
     setTimeRemaining(20);
@@ -197,6 +198,7 @@ const RightSoleScreen: React.FC = () => {
     setConsoleLog(prev => [...prev, `[INFO] Processed ${pressureData.length} data points`]);
     setConsoleLog(prev => [...prev, `[INFO] Average pressure: ${totalAverage} kPa`]);
     setConsoleLog(prev => [...prev, `[INFO] Max pressure: P${maxIndex + 1} = ${maxValue} kPa`]);
+    setConsoleLog(prev => [...prev, `[INFO] Averaged pressure values: ${averages.join(', ')}`]);
   };
 
   const formatTime = (seconds: number) => {
@@ -232,6 +234,20 @@ const RightSoleScreen: React.FC = () => {
     } catch (error) {
       console.error('Failed to export all files:', error);
       setConsoleLog(prev => [...prev, '[ERROR] Failed to create export package']);
+    }
+  };
+
+  // Determine which pressure values to display on heatmap
+  const getHeatmapPressureValues = () => {
+    if (testCompleted) {
+      // Show averaged values after test completion
+      return averagePressures;
+    } else if (isRecording) {
+      // Show live values during recording
+      return currentPressures;
+    } else {
+      // Show zeros when not recording and no test completed
+      return Array(8).fill(0);
     }
   };
 
@@ -365,6 +381,16 @@ const RightSoleScreen: React.FC = () => {
                   <div className="text-4xl font-mono font-bold text-[#d32f2f]">
                     {formatTime(timeRemaining)}
                   </div>
+                  {isRecording && (
+                    <div className="text-sm text-yellow-400 mt-2">
+                      Recording live data... Stand still!
+                    </div>
+                  )}
+                  {testCompleted && (
+                    <div className="text-sm text-green-400 mt-2">
+                      ✅ Test completed - Showing averaged results
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex space-x-2">
@@ -437,10 +463,22 @@ const RightSoleScreen: React.FC = () => {
 
           {/* Center Column - Heatmap */}
           <div className="bg-gray-900 rounded-lg p-6 border border-gray-700">
-            <h2 className="text-xl font-medium mb-4">🦶 Right Sole Heatmap</h2>
+            <h2 className="text-xl font-medium mb-4 flex items-center justify-between">
+              <span>🦶 Right Sole Heatmap</span>
+              {testCompleted && (
+                <span className="text-sm bg-green-900 text-green-100 px-2 py-1 rounded-full">
+                  Averaged Results
+                </span>
+              )}
+              {isRecording && (
+                <span className="text-sm bg-yellow-900 text-yellow-100 px-2 py-1 rounded-full animate-pulse">
+                  Live Data
+                </span>
+              )}
+            </h2>
             <div id="heatmap-container">
               <HeatmapVisualization 
-                pressureValues={testCompleted ? averagePressures : currentPressures}
+                pressureValues={getHeatmapPressureValues()}
                 soleType="right"
                 isRecording={isRecording}
               />
