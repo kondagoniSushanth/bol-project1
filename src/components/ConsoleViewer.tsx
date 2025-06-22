@@ -13,21 +13,35 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({ logs }) => {
     }
   }, [logs]);
 
+  // 🟦 Color based on log content
   const getLogColor = (log: string): string => {
     if (log.includes('[ERROR]')) return 'text-red-400';
     if (log.includes('[INFO]')) return 'text-blue-400';
     if (log.includes('PRESSURE_')) return 'text-green-400';
+    if (log.includes('BLE_RAW')) return 'text-yellow-400';
     return 'text-gray-300';
   };
 
+  // ✅ Check if pressure-like data is valid (for both CSV or raw)
   const isValidPressureData = (log: string): boolean => {
-    if (!log.includes('PRESSURE_')) return true;
-    
-    const match = log.match(/PRESSURE_(?:LEFT|RIGHT): (.+)/);
-    if (!match) return false;
-    
-    const values = match[1].split(',');
-    return values.length === 8 && values.every(val => !isNaN(Number(val.trim())));
+    if (log.includes('PRESSURE_')) {
+      const match = log.match(/PRESSURE_(?:LEFT|RIGHT): (.+)/);
+      if (!match) return false;
+      const values = match[1].split(',');
+      return values.length === 8 && values.every(val => !isNaN(Number(val.trim())));
+    }
+
+    if (log.includes('BLE_RAW')) {
+      const match = log.match(/BLE_RAW: \[(.+)\]/);
+      if (!match) return false;
+      const values = match[1].split(',').map(val => val.trim());
+      return values.length === 8 && values.every(val => {
+        const num = Number(val);
+        return !isNaN(num) && num >= 0 && num <= 255;
+      });
+    }
+
+    return true;
   };
 
   return (
