@@ -135,12 +135,30 @@ class BLEManager {
     
     if (value && this.isCollecting) {
       try {
-        console.log('Received BLE data, length:', value.byteLength);
+        console.log('Received BLE data, byteLength:', value.byteLength);
         
-        // Method 1: Try parsing as string (most common ESP32 format)
+        // 🎯 PRIORITY METHOD: Raw byte parsing for uint8_t[8] from ESP32
+        if (value.byteLength === 8) {
+          const data = new Uint8Array(value.buffer);
+          const pressureValues = Array.from(data);
+          console.log('✅ Received raw byte pressure values:', pressureValues);
+          this.onDataReceived?.(pressureValues);
+          return;
+        }
+        
+        // Fallback: Handle other byte lengths with raw byte parsing
+        if (value.byteLength >= 8) {
+          const data = new Uint8Array(value.buffer);
+          const pressureValues = Array.from(data.slice(0, 8));
+          console.log('✅ Received raw byte values (truncated to 8):', pressureValues);
+          this.onDataReceived?.(pressureValues);
+          return;
+        }
+        
+        // Legacy support: String parsing (only if byteLength != 8)
         const decoder = new TextDecoder();
         const dataString = decoder.decode(value);
-        console.log('Received string data:', dataString);
+        console.log('📝 Attempting string parsing for data:', dataString);
         
         // Check if it's comma-separated values
         if (dataString.includes(',')) {
@@ -152,13 +170,13 @@ class BLEManager {
             .filter((_, index) => index < 8); // Take only first 8 values
           
           if (pressureValues.length === 8) {
-            console.log('Parsed pressure values:', pressureValues);
+            console.log('✅ Parsed comma-separated values:', pressureValues);
             this.onDataReceived?.(pressureValues);
             return;
           }
         }
         
-        // Method 2: Try parsing as space-separated values
+        // Try parsing as space-separated values
         if (dataString.includes(' ')) {
           const pressureValues = dataString.trim().split(/\s+/)
             .map(val => {
@@ -168,64 +186,41 @@ class BLEManager {
             .filter((_, index) => index < 8);
           
           if (pressureValues.length === 8) {
-            console.log('Parsed space-separated values:', pressureValues);
+            console.log('✅ Parsed space-separated values:', pressureValues);
             this.onDataReceived?.(pressureValues);
             return;
           }
         }
         
-        // Method 3: Try parsing as single number (if ESP32 sends one value at a time)
+        // Try parsing as single number (fallback)
         const singleValue = parseInt(dataString.trim(), 10);
         if (!isNaN(singleValue)) {
-          // For single values, we'll need to handle this differently
-          // This is a fallback - ideally ESP32 should send all 8 values
-          console.log('Received single value:', singleValue);
-          const paddedValues = Array(8).fill(singleValue);
+          console.log('⚠️ Received single value (padding to 8):', singleValue);
+          const paddedValues = Array(8).fill(Math.max(0, Math.min(255, singleValue)));
           this.onDataReceived?.(paddedValues);
           return;
         }
         
-        // Method 4: Try parsing as raw bytes
-        const data = new Uint8Array(value.buffer);
-        console.log('Raw byte data:', Array.from(data));
-        
-        if (data.length >= 8) {
-          const pressureValues = Array.from(data.slice(0, 8));
-          console.log('Parsed byte values:', pressureValues);
-          this.onDataReceived?.(pressureValues);
-          return;
-        }
-        
-        // Method 5: Try parsing as 16-bit values (if ESP32 sends 2 bytes per sensor)
-        if (data.length >= 16) {
-          const pressureValues = [];
-          for (let i = 0; i < 16; i += 2) {
-            const value = (data[i + 1] << 8) | data[i]; // Little endian
-            pressureValues.push(Math.max(0, Math.min(255, value)));
-          }
-          console.log('Parsed 16-bit values:', pressureValues.slice(0, 8));
-          this.onDataReceived?.(pressureValues.slice(0, 8));
-          return;
-        }
-        
-        console.warn('Could not parse ESP32 data format:', dataString, 'Raw bytes:', Array.from(data));
+        // If we get here, data format is unrecognized
+        const rawData = new Uint8Array(value.buffer);
+        console.warn('❌ Could not parse ESP32 data format. ByteLength:', value.byteLength, 'Raw bytes:', Array.from(rawData), 'String attempt:', dataString);
         
       } catch (error) {
-        console.error('Error parsing ESP32 data:', error);
+        console.error('❌ Error parsing ESP32 data:', error);
       }
     }
   }
 
   startDataCollection(): void {
     this.isCollecting = true;
-    console.log('Starting data collection...');
+    console.log('🚀 Starting data collection...');
     
     // If we have a real BLE connection, data will come via notifications
     // For demo purposes, simulate data when no real connection
     if (!this.characteristic || this.device?.id?.startsWith('demo-')) {
       this.simulateDataCollection();
     } else {
-      // For real ESP32 connection, you might want to send a start command
+      // For real ESP32 connection, send start command
       this.sendStartCommand();
     }
   }
@@ -236,15 +231,15 @@ class BLEManager {
         // Send start command to ESP32 (customize based on your ESP32 implementation)
         const startCommand = new TextEncoder().encode('START');
         await this.characteristic.writeValue(startCommand);
-        console.log('Sent START command to ESP32');
+        console.log('📡 Sent START command to ESP32');
       } catch (error) {
-        console.error('Error sending start command:', error);
+        console.error('❌ Error sending start command:', error);
       }
     }
   }
 
   private simulateDataCollection(): void {
-    console.log('Starting simulated data collection...');
+    console.log('🎭 Starting simulated data collection...');
     this.collectionInterval = setInterval(() => {
       if (!this.isCollecting) return;
       
@@ -260,7 +255,7 @@ class BLEManager {
 
   stopDataCollection(): void {
     this.isCollecting = false;
-    console.log('Stopping data collection...');
+    console.log('🛑 Stopping data collection...');
     
     if (this.collectionInterval) {
       clearInterval(this.collectionInterval);
@@ -278,15 +273,15 @@ class BLEManager {
       try {
         const stopCommand = new TextEncoder().encode('STOP');
         await this.characteristic.writeValue(stopCommand);
-        console.log('Sent STOP command to ESP32');
+        console.log('📡 Sent STOP command to ESP32');
       } catch (error) {
-        console.error('Error sending stop command:', error);
+        console.error('❌ Error sending stop command:', error);
       }
     }
   }
 
   async disconnect(): Promise<void> {
-    console.log('Disconnecting from device...');
+    console.log('🔌 Disconnecting from device...');
     this.stopDataCollection();
     
     if (this.characteristic) {

@@ -76,6 +76,7 @@ const LeftSoleScreen: React.FC = () => {
     // Add initial console message
     setConsoleLog(['[INFO] Foot Pressure Heatmap System Initialized']);
     setConsoleLog(prev => [...prev, '[INFO] Ready to scan for ESP32 BLE devices']);
+    setConsoleLog(prev => [...prev, '[INFO] ESP32 should send 8 raw bytes (uint8_t[8]) via BLE notifications']);
 
     return () => {
       if (timerRef.current) {
@@ -142,6 +143,7 @@ const LeftSoleScreen: React.FC = () => {
     setAveragePressures(Array(8).fill(0)); // Reset averages
     setConsoleLog(prev => [...prev, '[INFO] Starting 20-second measurement...']);
     setConsoleLog(prev => [...prev, '[INFO] Please stand still on the pressure sensors']);
+    setConsoleLog(prev => [...prev, '[INFO] ESP32 will send raw byte data (uint8_t[8])']);
     setTimeRemaining(20);
 
     timerRef.current = setInterval(() => {
@@ -373,7 +375,10 @@ const LeftSoleScreen: React.FC = () => {
                     ⚠️ Make sure your ESP32 is powered on and advertising
                   </div>
                   <div className="text-blue-400 mt-2">
-                    📡 ESP32 should send data as: "value1,value2,value3,value4,value5,value6,value7,value8"
+                    📡 ESP32 should send 8 raw bytes (uint8_t[8]) via BLE notifications
+                  </div>
+                  <div className="text-green-400 mt-1">
+                    ✅ Each byte represents pressure value 0-255
                   </div>
                 </div>
 
