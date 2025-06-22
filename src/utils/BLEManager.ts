@@ -133,43 +133,82 @@ class BLEManager {
     const target = event.target as BluetoothRemoteGATTCharacteristic;
     const value = target.value;
     
-    if (value) {
+    if (value && this.isCollecting) {
       try {
-        // Parse the received data from ESP32
-        // Assuming ESP32 sends 8 pressure values as bytes or as a string
-        const data = new Uint8Array(value.buffer);
+        console.log('Received BLE data, length:', value.byteLength);
         
-        // If ESP32 sends as comma-separated string
-        if (data.length > 8) {
-          const decoder = new TextDecoder();
-          const dataString = decoder.decode(data);
-          const pressureValues = dataString.split(',').map(val => parseInt(val.trim(), 10)).filter(val => !isNaN(val));
+        // Method 1: Try parsing as string (most common ESP32 format)
+        const decoder = new TextDecoder();
+        const dataString = decoder.decode(value);
+        console.log('Received string data:', dataString);
+        
+        // Check if it's comma-separated values
+        if (dataString.includes(',')) {
+          const pressureValues = dataString.trim().split(',')
+            .map(val => {
+              const num = parseInt(val.trim(), 10);
+              return isNaN(num) ? 0 : Math.max(0, Math.min(255, num)); // Clamp to 0-255
+            })
+            .filter((_, index) => index < 8); // Take only first 8 values
           
           if (pressureValues.length === 8) {
+            console.log('Parsed pressure values:', pressureValues);
             this.onDataReceived?.(pressureValues);
             return;
           }
         }
         
-        // If ESP32 sends as raw bytes (8 bytes for 8 sensors)
+        // Method 2: Try parsing as space-separated values
+        if (dataString.includes(' ')) {
+          const pressureValues = dataString.trim().split(/\s+/)
+            .map(val => {
+              const num = parseInt(val.trim(), 10);
+              return isNaN(num) ? 0 : Math.max(0, Math.min(255, num));
+            })
+            .filter((_, index) => index < 8);
+          
+          if (pressureValues.length === 8) {
+            console.log('Parsed space-separated values:', pressureValues);
+            this.onDataReceived?.(pressureValues);
+            return;
+          }
+        }
+        
+        // Method 3: Try parsing as single number (if ESP32 sends one value at a time)
+        const singleValue = parseInt(dataString.trim(), 10);
+        if (!isNaN(singleValue)) {
+          // For single values, we'll need to handle this differently
+          // This is a fallback - ideally ESP32 should send all 8 values
+          console.log('Received single value:', singleValue);
+          const paddedValues = Array(8).fill(singleValue);
+          this.onDataReceived?.(paddedValues);
+          return;
+        }
+        
+        // Method 4: Try parsing as raw bytes
+        const data = new Uint8Array(value.buffer);
+        console.log('Raw byte data:', Array.from(data));
+        
         if (data.length >= 8) {
           const pressureValues = Array.from(data.slice(0, 8));
+          console.log('Parsed byte values:', pressureValues);
           this.onDataReceived?.(pressureValues);
           return;
         }
         
-        // If ESP32 sends as 16-bit values (16 bytes for 8 sensors)
+        // Method 5: Try parsing as 16-bit values (if ESP32 sends 2 bytes per sensor)
         if (data.length >= 16) {
           const pressureValues = [];
           for (let i = 0; i < 16; i += 2) {
             const value = (data[i + 1] << 8) | data[i]; // Little endian
-            pressureValues.push(value);
+            pressureValues.push(Math.max(0, Math.min(255, value)));
           }
+          console.log('Parsed 16-bit values:', pressureValues.slice(0, 8));
           this.onDataReceived?.(pressureValues.slice(0, 8));
           return;
         }
         
-        console.warn('Unexpected data format from ESP32:', data);
+        console.warn('Could not parse ESP32 data format:', dataString, 'Raw bytes:', Array.from(data));
         
       } catch (error) {
         console.error('Error parsing ESP32 data:', error);
@@ -187,7 +226,7 @@ class BLEManager {
       this.simulateDataCollection();
     } else {
       // For real ESP32 connection, you might want to send a start command
-      // this.sendStartCommand();
+      this.sendStartCommand();
     }
   }
 

@@ -146,11 +146,15 @@ const LeftSoleScreen: React.FC = () => {
 
     timerRef.current = setInterval(() => {
       setTimeRemaining(prev => {
-        if (prev <= 1) {
-          stopMeasurement();
+        const newTime = prev - 1;
+        if (newTime <= 0) {
+          // Timer completed - trigger completion
+          setTimeout(() => {
+            completeTest();
+          }, 100); // Small delay to ensure state updates
           return 0;
         }
-        return prev - 1;
+        return newTime;
       });
     }, 1000);
 
@@ -166,6 +170,13 @@ const LeftSoleScreen: React.FC = () => {
     setIsRecording(false);
     bleManager.current.stopDataCollection();
     
+    // Complete the test
+    completeTest();
+  };
+
+  const completeTest = () => {
+    console.log('Completing test with data points:', pressureData.length);
+    
     if (pressureData.length > 0) {
       calculateAverages();
       setTestCompleted(true);
@@ -176,6 +187,8 @@ const LeftSoleScreen: React.FC = () => {
   };
 
   const calculateAverages = () => {
+    console.log('Calculating averages from', pressureData.length, 'data points');
+    
     if (pressureData.length === 0) return;
 
     const sums = Array(8).fill(0);
@@ -186,6 +199,7 @@ const LeftSoleScreen: React.FC = () => {
     });
 
     const averages = sums.map(sum => Math.round(sum / pressureData.length));
+    console.log('Calculated averages:', averages);
     setAveragePressures(averages);
 
     const maxValue = Math.max(...averages);
@@ -357,6 +371,9 @@ const LeftSoleScreen: React.FC = () => {
                   <div>Characteristic UUID: beb5483e-36e1-4688-b7f5-ea07361b26a8</div>
                   <div className="text-yellow-400 mt-2">
                     ⚠️ Make sure your ESP32 is powered on and advertising
+                  </div>
+                  <div className="text-blue-400 mt-2">
+                    📡 ESP32 should send data as: "value1,value2,value3,value4,value5,value6,value7,value8"
                   </div>
                 </div>
 
