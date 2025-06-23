@@ -228,7 +228,7 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
             </button>
           </div>
           <div>
-            Expected: PRESSURE_LEFT:50,100,150,200,250,255,128,64
+            Expected: PRESSURE_Values:50,100,150,200,250,255,128,64
           </div>
         </div>
       </div>
