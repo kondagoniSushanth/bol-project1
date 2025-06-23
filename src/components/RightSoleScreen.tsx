@@ -12,7 +12,8 @@ import {
   CheckCircle,
   XCircle,
   Wifi,
-  WifiOff
+  WifiOff,
+  Loader2
 } from 'lucide-react';
 import BLEManager from '../utils/BLEManager';
 import HeatmapVisualization from './HeatmapVisualization';
@@ -57,6 +58,12 @@ const RightSoleScreen: React.FC = () => {
       setConsoleLog(prev => [...prev, logEntry]);
     };
 
+    const handleRawDataReceived = (rawData: string) => {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = `[${timestamp}] ${rawData}`;
+      setConsoleLog(prev => [...prev, logEntry]);
+    };
+
     const handleConnectionChange = (connected: boolean) => {
       setBleConnected(connected);
       if (connected) {
@@ -66,17 +73,18 @@ const RightSoleScreen: React.FC = () => {
           setConsoleLog(prev => [...prev, `[INFO] Connected to ${deviceInfo.name} (${deviceInfo.id})`]);
         }
       } else {
-        setConsoleLog(prev => [...prev, '[INFO] Device disconnected']);
+        setConsoleLog(prev => [...prev, '[INFO] ESP32 device disconnected']);
       }
     };
 
     bleManager.current.onDataReceived = handleDataReceived;
+    bleManager.current.onRawDataReceived = handleRawDataReceived;
     bleManager.current.onConnectionChange = handleConnectionChange;
 
-    // Add initial console message
+    // Add initial console messages
     setConsoleLog(['[INFO] Foot Pressure Heatmap System Initialized']);
     setConsoleLog(prev => [...prev, '[INFO] Ready to scan for ESP32 BLE devices']);
-    setConsoleLog(prev => [...prev, '[INFO] ESP32 should send 8 raw bytes (uint8_t[8]) via BLE notifications']);
+    setConsoleLog(prev => [...prev, '[INFO] Expected data format: PRESSURE_RIGHT:val1,val2,val3,val4,val5,val6,val7,val8']);
 
     return () => {
       if (timerRef.current) {
@@ -89,24 +97,24 @@ const RightSoleScreen: React.FC = () => {
   const scanForDevices = async () => {
     setIsScanning(true);
     setConnectionError('');
-    setConsoleLog(prev => [...prev, '[INFO] Scanning for BLE devices...']);
+    setConsoleLog(prev => [...prev, '[INFO] Scanning for ESP32 BLE devices...']);
     
     try {
       const devices = await bleManager.current.scanForDevices();
       setAvailableDevices(devices);
       
       if (devices.length > 0) {
-        setConsoleLog(prev => [...prev, `[INFO] Found ${devices.length} device(s)`]);
+        setConsoleLog(prev => [...prev, `[INFO] Found ${devices.length} ESP32 device(s)`]);
         devices.forEach(device => {
           setConsoleLog(prev => [...prev, `[INFO] - ${device.name || 'Unknown Device'} (${device.id})`]);
         });
       } else {
-        setConsoleLog(prev => [...prev, '[INFO] No devices found']);
+        setConsoleLog(prev => [...prev, '[INFO] No ESP32 devices found']);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setConnectionError(errorMessage);
-      setConsoleLog(prev => [...prev, `[ERROR] Scan failed: ${errorMessage}`]);
+      setConsoleLog(prev => [...prev, `[ERROR] ESP32 scan failed: ${errorMessage}`]);
       
       if (errorMessage.includes('User cancelled')) {
         setConsoleLog(prev => [...prev, '[INFO] Device selection cancelled by user']);
@@ -118,7 +126,7 @@ const RightSoleScreen: React.FC = () => {
 
   const connectToDevice = async (device: BluetoothDevice) => {
     setConnectionError('');
-    setConsoleLog(prev => [...prev, `[INFO] Attempting to connect to ${device.name || 'Unknown Device'}...`]);
+    setConsoleLog(prev => [...prev, `[INFO] Attempting to connect to ESP32: ${device.name || 'Unknown Device'}...`]);
     
     try {
       await bleManager.current.connect(device);
@@ -127,7 +135,7 @@ const RightSoleScreen: React.FC = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Connection failed';
       setConnectionError(errorMessage);
-      setConsoleLog(prev => [...prev, `[ERROR] Connection failed: ${errorMessage}`]);
+      setConsoleLog(prev => [...prev, `[ERROR] ESP32 connection failed: ${errorMessage}`]);
     }
   };
 
@@ -140,20 +148,19 @@ const RightSoleScreen: React.FC = () => {
     setIsRecording(true);
     setTestCompleted(false);
     setPressureData([]);
-    setAveragePressures(Array(8).fill(0)); // Reset averages
+    setAveragePressures(Array(8).fill(0));
     setConsoleLog(prev => [...prev, '[INFO] Starting 20-second measurement...']);
     setConsoleLog(prev => [...prev, '[INFO] Please stand still on the pressure sensors']);
-    setConsoleLog(prev => [...prev, '[INFO] ESP32 will send raw byte data (uint8_t[8])']);
+    setConsoleLog(prev => [...prev, '[INFO] ESP32 will send pressure data via BLE']);
     setTimeRemaining(20);
 
     timerRef.current = setInterval(() => {
       setTimeRemaining(prev => {
         const newTime = prev - 1;
         if (newTime <= 0) {
-          // Timer completed - trigger completion
           setTimeout(() => {
             completeTest();
-          }, 100); // Small delay to ensure state updates
+          }, 100);
           return 0;
         }
         return newTime;
@@ -171,8 +178,6 @@ const RightSoleScreen: React.FC = () => {
 
     setIsRecording(false);
     bleManager.current.stopDataCollection();
-    
-    // Complete the test
     completeTest();
   };
 
@@ -253,16 +258,12 @@ const RightSoleScreen: React.FC = () => {
     }
   };
 
-  // Determine which pressure values to display on heatmap
   const getHeatmapPressureValues = () => {
     if (testCompleted) {
-      // Show averaged values after test completion
       return averagePressures;
     } else if (isRecording) {
-      // Show live values during recording
       return currentPressures;
     } else {
-      // Show zeros when not recording and no test completed
       return Array(8).fill(0);
     }
   };
@@ -324,13 +325,13 @@ const RightSoleScreen: React.FC = () => {
                 >
                   {isScanning ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Scanning...</span>
+                      <Loader2 className="animate-spin" size={16} />
+                      <span>Scanning & Connecting...</span>
                     </>
                   ) : (
                     <>
                       <Bluetooth size={16} />
-                      <span>Scan for ESP32 Devices</span>
+                      <span>Connect ESP32</span>
                     </>
                   )}
                 </button>
@@ -345,7 +346,7 @@ const RightSoleScreen: React.FC = () => {
                   </div>
                 )}
 
-                {availableDevices.length > 0 && (
+                {availableDevices.length > 0 && !bleConnected && (
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-300">Available ESP32 Devices</label>
                     <select 
@@ -367,18 +368,36 @@ const RightSoleScreen: React.FC = () => {
                   </div>
                 )}
 
+                {bleConnected && selectedDevice && (
+                  <div className="flex items-center space-x-3 px-4 py-2 bg-green-900 bg-opacity-30 border border-green-700 rounded-lg">
+                    <CheckCircle className="h-5 w-5 text-green-400" />
+                    <div>
+                      <span className="text-sm font-medium text-green-300">Connected</span>
+                      <p className="text-xs text-green-400">{selectedDevice.name || 'ESP32 Device'}</p>
+                    </div>
+                    <button
+                      onClick={() => bleManager.current.disconnect()}
+                      disabled={isRecording}
+                      className="ml-auto px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                )}
+
+                {/* Connection Instructions */}
                 <div className="text-xs text-gray-400 space-y-1 bg-gray-800 p-3 rounded">
                   <div className="font-medium text-gray-300">ESP32 Configuration:</div>
-                  <div>Service UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b</div>
-                  <div>Characteristic UUID: beb5483e-36e1-4688-b7f5-ea07361b26a8</div>
+                  <div>Service UUID: 12345678-1234-1234-1234-1234567890ab</div>
+                  <div>Characteristic UUID: abcd1234-5678-90ab-cdef-1234567890ab</div>
                   <div className="text-yellow-400 mt-2">
                     ⚠️ Make sure your ESP32 is powered on and advertising
                   </div>
                   <div className="text-blue-400 mt-2">
-                    📡 ESP32 should send 8 raw bytes (uint8_t[8]) via BLE notifications
+                    📡 Expected format: PRESSURE_RIGHT:val1,val2,val3,val4,val5,val6,val7,val8
                   </div>
                   <div className="text-green-400 mt-1">
-                    ✅ Each byte represents pressure value 0-255
+                    ✅ Look for devices named "ESP32", "FootPressure", or similar
                   </div>
                 </div>
 
@@ -510,10 +529,13 @@ const RightSoleScreen: React.FC = () => {
           {/* Right Column - Console & Export */}
           <div className="space-y-6">
             {/* Console */}
-            <div className="bg-gray-900 rounded-lg p-6 border border-gray-700">
-              <h2 className="text-xl font-medium mb-4">📟 Live Sensor Console</h2>
-              <ConsoleViewer logs={consoleLog} />
-            </div>
+            <ConsoleViewer 
+              logs={consoleLog} 
+              isConnected={bleConnected}
+              onAddLog={(message, type) => {
+                setConsoleLog(prev => [...prev, message]);
+              }}
+            />
 
             {/* Export Controls */}
             {testCompleted && (
