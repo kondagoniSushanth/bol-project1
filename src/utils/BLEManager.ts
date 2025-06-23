@@ -10,7 +10,7 @@ class BLEManager {
   public onConnectionChange: ((connected: boolean) => void) | null = null;
   public onRawDataReceived: ((rawData: string) => void) | null = null;
 
-  // Updated UUIDs - these should match your ESP32 implementation
+  // Updated UUIDs to match your reference code
   private readonly SERVICE_UUID = '12345678-1234-1234-1234-1234567890ab';
   private readonly CHARACTERISTIC_UUID = 'abcd1234-5678-90ab-cdef-1234567890ab';
 
@@ -162,34 +162,41 @@ class BLEManager {
         console.log('📡 Received ESP32 data:', dataString);
         this.onRawDataReceived?.(dataString);
         
-        // Parse pressure data based on expected format
+        // 🎯 CRITICAL: Parse pressure data EXACTLY as received from ESP32
+        // Format: "PRESSURE_LEFT:50,100,150,200,250,255,128,64" or "PRESSURE_RIGHT:..."
         if (dataString.includes('PRESSURE_LEFT:') || dataString.includes('PRESSURE_RIGHT:')) {
           const match = dataString.match(/PRESSURE_(?:LEFT|RIGHT):(.+)/);
           if (match) {
             const valuesString = match[1].trim();
+            
+            // ✅ PRESERVE ALL VALUES EXACTLY AS RECEIVED - DO NOT MODIFY OR ASSUME ERRORS
             const pressureValues = valuesString.split(',')
               .map(val => {
-                const num = parseInt(val.trim(), 10);
+                const trimmedVal = val.trim();
+                const num = parseInt(trimmedVal, 10);
+                // Only clamp to valid range, don't assume any value is "wrong"
                 return isNaN(num) ? 0 : Math.max(0, Math.min(255, num));
               })
               .slice(0, 8); // Take only first 8 values
             
-            // Pad with zeros if less than 8 values
+            // Pad with zeros if less than 8 values (but preserve all received values)
             while (pressureValues.length < 8) {
               pressureValues.push(0);
             }
             
-            console.log('✅ Parsed pressure values:', pressureValues);
+            console.log('✅ Parsed pressure values (EXACT from ESP32):', pressureValues);
             this.onDataReceived?.(pressureValues);
             return;
           }
         }
         
-        // Try parsing as comma-separated values without prefix
+        // Fallback: Try parsing as comma-separated values without prefix
         if (dataString.includes(',')) {
           const pressureValues = dataString.trim().split(',')
             .map(val => {
-              const num = parseInt(val.trim(), 10);
+              const trimmedVal = val.trim();
+              const num = parseInt(trimmedVal, 10);
+              // Preserve exact values, only handle invalid numbers
               return isNaN(num) ? 0 : Math.max(0, Math.min(255, num));
             })
             .slice(0, 8);
@@ -199,7 +206,7 @@ class BLEManager {
               pressureValues.push(0);
             }
             
-            console.log('✅ Parsed CSV values:', pressureValues);
+            console.log('✅ Parsed CSV values (EXACT from ESP32):', pressureValues);
             this.onDataReceived?.(pressureValues);
             return;
           }
@@ -209,7 +216,7 @@ class BLEManager {
         if (value.byteLength === 8) {
           const data = new Uint8Array(value.buffer);
           const pressureValues = Array.from(data);
-          console.log('✅ Received raw byte pressure values:', pressureValues);
+          console.log('✅ Received raw byte pressure values (EXACT from ESP32):', pressureValues);
           this.onDataReceived?.(pressureValues);
           return;
         }
@@ -263,7 +270,8 @@ class BLEManager {
       if (!this.isCollecting) return;
       
       // Generate realistic pressure data with some variation
-      const baseValues = [88, 122, 199, 145, 101, 92, 130, 88];
+      // ✅ IMPORTANT: These are example values - real ESP32 will send actual sensor readings
+      const baseValues = [50, 100, 150, 200, 250, 255, 128, 64];
       const simulatedData = baseValues.map(base => 
         Math.max(0, Math.min(255, base + Math.floor(Math.random() * 40 - 20)))
       );

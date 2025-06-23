@@ -125,15 +125,16 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
     }
   };
 
-  // Check if pressure-like data is valid
+  // ✅ CRITICAL: Validate pressure data format - DO NOT assume any values are wrong
   const isValidPressureData = (log: string): boolean => {
     if (log.includes('PRESSURE_')) {
       const match = log.match(/PRESSURE_(?:LEFT|RIGHT):(.+)/);
       if (!match) return false;
       const values = match[1].split(',');
+      // Only check if we have 8 comma-separated values, don't validate individual numbers
       return values.length === 8 && values.every(val => !isNaN(Number(val.trim())));
     }
-    return true;
+    return true; // All other logs are considered valid
   };
 
   return (
@@ -227,7 +228,7 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
             </button>
           </div>
           <div>
-            Expected: PRESSURE_LEFT:88,122,199,145,101,92,130,88
+            Expected: PRESSURE_LEFT:50,100,150,200,250,255,128,64
           </div>
         </div>
       </div>
