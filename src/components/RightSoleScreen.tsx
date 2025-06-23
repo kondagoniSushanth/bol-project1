@@ -85,6 +85,7 @@ const RightSoleScreen: React.FC = () => {
     setConsoleLog(['[INFO] Foot Pressure Heatmap System Initialized']);
     setConsoleLog(prev => [...prev, '[INFO] Ready to scan for ESP32 BLE devices']);
     setConsoleLog(prev => [...prev, '[INFO] Expected data format: PRESSURE_RIGHT:val1,val2,val3,val4,val5,val6,val7,val8']);
+    setConsoleLog(prev => [...prev, '[INFO] Updated to support uint32_t values (0-4294967295)']);
 
     return () => {
       if (timerRef.current) {
@@ -159,7 +160,7 @@ const RightSoleScreen: React.FC = () => {
         const newTime = prev - 1;
         if (newTime <= 0) {
           setTimeout(() => {
-            completeTest();
+            completeTestWithAveraging();
           }, 100);
           return 0;
         }
@@ -178,19 +179,30 @@ const RightSoleScreen: React.FC = () => {
 
     setIsRecording(false);
     bleManager.current.stopDataCollection();
-    completeTest();
+    
+    // When stopped early, do NOT calculate averages or complete test
+    setConsoleLog(prev => [...prev, '[INFO] Measurement stopped early by user']);
+    setConsoleLog(prev => [...prev, '[WARNING] Test incomplete - no averaged results calculated']);
+    setConsoleLog(prev => [...prev, `[INFO] Collected ${pressureData.length} data points before stopping`]);
+    
+    // Reset to show no pressure values (not current live values)
+    setCurrentPressures(Array(8).fill(0));
   };
 
-  const completeTest = () => {
-    console.log('Completing test with data points:', pressureData.length);
+  const completeTestWithAveraging = () => {
+    console.log('Timer completed - calculating averages from', pressureData.length, 'data points');
     
     if (pressureData.length > 0) {
       calculateAverages();
       setTestCompleted(true);
-      setConsoleLog(prev => [...prev, '[INFO] Measurement completed. Calculating averages...']);
+      setConsoleLog(prev => [...prev, '[INFO] ✅ 20-second measurement completed successfully!']);
+      setConsoleLog(prev => [...prev, '[INFO] Calculating averaged pressure values...']);
     } else {
       setConsoleLog(prev => [...prev, '[WARNING] No data collected during measurement']);
     }
+    
+    setIsRecording(false);
+    bleManager.current.stopDataCollection();
   };
 
   const calculateAverages = () => {
@@ -217,8 +229,8 @@ const RightSoleScreen: React.FC = () => {
     setAveragePressure(totalAverage);
 
     setConsoleLog(prev => [...prev, `[INFO] Processed ${pressureData.length} data points`]);
-    setConsoleLog(prev => [...prev, `[INFO] Average pressure: ${totalAverage} kPa`]);
-    setConsoleLog(prev => [...prev, `[INFO] Max pressure: P${maxIndex + 1} = ${maxValue} kPa`]);
+    setConsoleLog(prev => [...prev, `[INFO] Average pressure: ${totalAverage} units`]);
+    setConsoleLog(prev => [...prev, `[INFO] Max pressure: P${maxIndex + 1} = ${maxValue} units`]);
     setConsoleLog(prev => [...prev, `[INFO] Averaged pressure values: ${averages.join(', ')}`]);
   };
 
@@ -260,10 +272,13 @@ const RightSoleScreen: React.FC = () => {
 
   const getHeatmapPressureValues = () => {
     if (testCompleted) {
+      // Only show averaged results when test is fully completed (timer reached 0)
       return averagePressures;
     } else if (isRecording) {
+      // Show live data during recording
       return currentPressures;
     } else {
+      // Show no pressure when not recording or when stopped early
       return Array(8).fill(0);
     }
   };
@@ -396,6 +411,9 @@ const RightSoleScreen: React.FC = () => {
                   <div className="text-blue-400 mt-2">
                     📡 Expected format: PRESSURE_RIGHT:val1,val2,val3,val4,val5,val6,val7,val8
                   </div>
+                  <div className="text-purple-400 mt-1">
+                    🔢 Supports uint32_t values (0 to 4,294,967,295)
+                  </div>
                   <div className="text-green-400 mt-1">
                     ✅ Look for devices named "ESP32", "FootPressure", or similar
                   </div>
@@ -432,6 +450,11 @@ const RightSoleScreen: React.FC = () => {
                       ✅ Test completed - Showing averaged results
                     </div>
                   )}
+                  {!isRecording && !testCompleted && timeRemaining < 20 && (
+                    <div className="text-sm text-orange-400 mt-2">
+                      ⚠️ Test stopped early - No averaged results
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex space-x-2">
@@ -460,6 +483,13 @@ const RightSoleScreen: React.FC = () => {
                     <span>Please connect to ESP32 device to begin measurement.</span>
                   </div>
                 )}
+                
+                <div className="text-xs text-gray-400 bg-gray-800 p-3 rounded">
+                  <div className="font-medium text-gray-300 mb-1">Important:</div>
+                  <div>• Averaged results only shown when full 20-second timer completes</div>
+                  <div>• Stopping early will not calculate or display averaged pressure values</div>
+                  <div>• Live data is shown during recording only</div>
+                </div>
               </div>
             </div>
 
@@ -475,16 +505,16 @@ const RightSoleScreen: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-300">Average Pressure:</span>
-                    <span className="font-medium">{averagePressure} kPa</span>
+                    <span className="font-medium">{averagePressure} units</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-300">Max Point:</span>
-                    <span className="font-medium">P{maxPressurePoint.index + 1} – {maxPressurePoint.value} kPa</span>
+                    <span className="font-medium">P{maxPressurePoint.index + 1} – {maxPressurePoint.value} units</span>
                   </div>
-                  {maxPressurePoint.value > 200 && (
+                  {maxPressurePoint.value > 1000000 && (
                     <div className="text-yellow-400 text-sm flex items-center space-x-2">
                       <AlertTriangle size={16} />
-                      <span>Pressure point exceeded 200kPa - consider medical evaluation</span>
+                      <span>High pressure detected - consider medical evaluation</span>
                     </div>
                   )}
                 </div>
@@ -514,6 +544,11 @@ const RightSoleScreen: React.FC = () => {
               {isRecording && (
                 <span className="text-sm bg-yellow-900 text-yellow-100 px-2 py-1 rounded-full animate-pulse">
                   Live Data
+                </span>
+              )}
+              {!isRecording && !testCompleted && timeRemaining < 20 && (
+                <span className="text-sm bg-orange-900 text-orange-100 px-2 py-1 rounded-full">
+                  Test Incomplete
                 </span>
               )}
             </h2>

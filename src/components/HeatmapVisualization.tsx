@@ -13,17 +13,31 @@ const HeatmapVisualization: React.FC<HeatmapVisualizationProps> = ({
 }) => {
   const getPressureColor = (value: number): string => {
     if (value === 0) return '#374151'; // Gray for no pressure
-    if (value <= 50) return '#00BCD4';   // Cool blue
-    if (value <= 100) return '#4CAF50';  // Green
-    if (value <= 150) return '#FFEB3B';  // Yellow
-    if (value <= 200) return '#FF9800';  // Orange
-    return '#F44336';                    // Hot red
+    
+    // Updated color scale for uint32_t values (0 to 4,294,967,295)
+    // Using logarithmic scale for better visualization of large ranges
+    const logValue = Math.log10(Math.max(1, value));
+    const maxLog = Math.log10(4294967295); // log10 of max uint32_t
+    const normalizedValue = logValue / maxLog;
+    
+    if (normalizedValue <= 0.2) return '#00BCD4';   // Cool blue (low)
+    if (normalizedValue <= 0.4) return '#4CAF50';   // Green (low-medium)
+    if (normalizedValue <= 0.6) return '#FFEB3B';   // Yellow (medium)
+    if (normalizedValue <= 0.8) return '#FF9800';   // Orange (medium-high)
+    return '#F44336';                                // Hot red (high)
   };
 
   const getPressureSize = (value: number): number => {
     const minSize = 20;
     const maxSize = 40;
-    const normalizedValue = Math.min(value / 250, 1); // Normalize to 0-1
+    
+    if (value === 0) return minSize;
+    
+    // Use logarithmic scale for size as well
+    const logValue = Math.log10(Math.max(1, value));
+    const maxLog = Math.log10(4294967295);
+    const normalizedValue = Math.min(logValue / maxLog, 1);
+    
     return minSize + (normalizedValue * (maxSize - minSize));
   };
 
@@ -52,6 +66,15 @@ const rightSolePoints = [
 ];
 
   const points = soleType === 'left' ? leftSolePoints : rightSolePoints;
+
+  // Format pressure values for display (handle large uint32_t values)
+  const formatPressureValue = (value: number): string => {
+    if (value === 0) return '0';
+    if (value < 1000) return value.toString();
+    if (value < 1000000) return `${(value / 1000).toFixed(1)}K`;
+    if (value < 1000000000) return `${(value / 1000000).toFixed(1)}M`;
+    return `${(value / 1000000000).toFixed(1)}B`;
+  };
 
   return (
     <div className="relative w-full max-w-md mx-auto">
@@ -83,7 +106,7 @@ const rightSolePoints = [
             >
               {/* Pressure value label */}
               <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-bold text-white bg-black bg-opacity-50 px-1 rounded">
-                {pressureValues[index] || 0}
+                {formatPressureValue(pressureValues[index] || 0)}
               </div>
             </div>
           ))}
@@ -92,13 +115,13 @@ const rightSolePoints = [
 
       {/* Color legend */}
       <div className="mt-6 flex items-center justify-between">
-        <div className="text-sm font-medium">Pressure (kPa)</div>
+        <div className="text-sm font-medium">Pressure (uint32_t)</div>
         <div className="flex items-center space-x-1">
           <div className="text-xs">0</div>
           <div className="flex flex-col space-y-1">
             <div className="w-4 h-2 bg-gradient-to-r from-[#00BCD4] via-[#4CAF50] via-[#FFEB3B] via-[#FF9800] to-[#F44336]"></div>
           </div>
-          <div className="text-xs">225+</div>
+          <div className="text-xs">4.3B+</div>
         </div>
       </div>
 
@@ -117,7 +140,7 @@ const rightSolePoints = [
         {pressureValues.map((value, index) => (
           <div key={index} className="text-center">
             <div className="font-medium">P{index + 1}</div>
-            <div className="text-gray-400">{value || 0} kPa</div>
+            <div className="text-gray-400">{formatPressureValue(value || 0)}</div>
           </div>
         ))}
       </div>

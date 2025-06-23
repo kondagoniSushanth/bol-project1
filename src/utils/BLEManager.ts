@@ -169,13 +169,13 @@ class BLEManager {
           if (match) {
             const valuesString = match[1].trim();
             
-            // ✅ PRESERVE ALL VALUES EXACTLY AS RECEIVED - DO NOT MODIFY OR ASSUME ERRORS
+            // ✅ PRESERVE ALL VALUES EXACTLY AS RECEIVED - Support uint32_t range (0-4294967295)
             const pressureValues = valuesString.split(',')
               .map(val => {
                 const trimmedVal = val.trim();
                 const num = parseInt(trimmedVal, 10);
-                // Only clamp to valid range, don't assume any value is "wrong"
-                return isNaN(num) ? 0 : Math.max(0, Math.min(255, num));
+                // Support full uint32_t range - only clamp invalid values
+                return isNaN(num) ? 0 : Math.max(0, Math.min(4294967295, num));
               })
               .slice(0, 8); // Take only first 8 values
             
@@ -184,7 +184,7 @@ class BLEManager {
               pressureValues.push(0);
             }
             
-            console.log('✅ Parsed pressure values (EXACT from ESP32):', pressureValues);
+            console.log('✅ Parsed pressure values (EXACT from ESP32, uint32_t range):', pressureValues);
             this.onDataReceived?.(pressureValues);
             return;
           }
@@ -196,8 +196,8 @@ class BLEManager {
             .map(val => {
               const trimmedVal = val.trim();
               const num = parseInt(trimmedVal, 10);
-              // Preserve exact values, only handle invalid numbers
-              return isNaN(num) ? 0 : Math.max(0, Math.min(255, num));
+              // Support full uint32_t range
+              return isNaN(num) ? 0 : Math.max(0, Math.min(4294967295, num));
             })
             .slice(0, 8);
           
@@ -206,17 +206,26 @@ class BLEManager {
               pressureValues.push(0);
             }
             
-            console.log('✅ Parsed CSV values (EXACT from ESP32):', pressureValues);
+            console.log('✅ Parsed CSV values (EXACT from ESP32, uint32_t range):', pressureValues);
             this.onDataReceived?.(pressureValues);
             return;
           }
         }
         
-        // Fallback: Try raw byte parsing for uint8_t[8] format
+        // Fallback: Try raw byte parsing for uint32_t[8] format (32 bytes total)
+        if (value.byteLength === 32) {
+          const data = new Uint32Array(value.buffer);
+          const pressureValues = Array.from(data);
+          console.log('✅ Received raw uint32_t pressure values (EXACT from ESP32):', pressureValues);
+          this.onDataReceived?.(pressureValues);
+          return;
+        }
+        
+        // Legacy fallback: uint8_t[8] format (8 bytes)
         if (value.byteLength === 8) {
           const data = new Uint8Array(value.buffer);
           const pressureValues = Array.from(data);
-          console.log('✅ Received raw byte pressure values (EXACT from ESP32):', pressureValues);
+          console.log('✅ Received raw uint8_t pressure values (legacy format):', pressureValues);
           this.onDataReceived?.(pressureValues);
           return;
         }
@@ -264,16 +273,16 @@ class BLEManager {
 
   private simulateDataCollection(): void {
     console.log('🎭 Starting simulated ESP32 data collection...');
-    this.onRawDataReceived?.('🎭 Simulating ESP32 pressure data...');
+    this.onRawDataReceived?.('🎭 Simulating ESP32 pressure data (uint32_t range)...');
     
     this.collectionInterval = setInterval(() => {
       if (!this.isCollecting) return;
       
-      // Generate realistic pressure data with some variation
+      // Generate realistic pressure data with some variation for uint32_t range
       // ✅ IMPORTANT: These are example values - real ESP32 will send actual sensor readings
-      const baseValues = [50, 100, 150, 200, 250, 255, 128, 64];
+      const baseValues = [50000, 100000, 150000, 200000, 250000, 300000, 128000, 64000];
       const simulatedData = baseValues.map(base => 
-        Math.max(0, Math.min(255, base + Math.floor(Math.random() * 40 - 20)))
+        Math.max(0, Math.min(4294967295, base + Math.floor(Math.random() * 40000 - 20000)))
       );
       
       // Simulate the expected ESP32 data format

@@ -132,7 +132,11 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
       if (!match) return false;
       const values = match[1].split(',');
       // Only check if we have 8 comma-separated values, don't validate individual numbers
-      return values.length === 8 && values.every(val => !isNaN(Number(val.trim())));
+      // Support uint32_t range (0 to 4,294,967,295)
+      return values.length === 8 && values.every(val => {
+        const num = parseInt(val.trim(), 10);
+        return !isNaN(num) && num >= 0 && num <= 4294967295;
+      });
     }
     return true; // All other logs are considered valid
   };
@@ -228,7 +232,7 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
             </button>
           </div>
           <div>
-            Expected: PRESSURE_Values:50,100,150,200,250,255,128,64
+            Expected: PRESSURE_Values:50000,100000,150000,200000,250000,300000,128000,64000 (uint32_t)
           </div>
         </div>
       </div>
