@@ -11,12 +11,14 @@ interface ConsoleViewerProps {
   logs: string[];
   isConnected?: boolean;
   onAddLog?: (message: string, type?: LogEntry['type']) => void;
+  onClearLogs?: () => void;
 }
 
 const ConsoleViewer: React.FC<ConsoleViewerProps> = ({ 
   logs, 
   isConnected = false,
-  onAddLog 
+  onAddLog,
+  onClearLogs
 }) => {
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
@@ -58,9 +60,13 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
     }
   };
 
-  // Clear logs
+  // ✅ FIXED: Clear logs function
   const clearLogs = () => {
-    setLogEntries([]);
+    if (onClearLogs) {
+      onClearLogs();
+    } else {
+      setLogEntries([]);
+    }
     onAddLog?.('📋 Console cleared', 'system');
   };
 
@@ -163,7 +169,7 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
           <button
             onClick={copyLogs}
             disabled={logEntries.length === 0}
-            className="p-1.5 text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1.5 text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Copy logs"
           >
             <Copy className="h-4 w-4" />
@@ -171,7 +177,7 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
           <button
             onClick={exportLogs}
             disabled={logEntries.length === 0}
-            className="p-1.5 text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1.5 text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Export logs"
           >
             <Download className="h-4 w-4" />
@@ -179,7 +185,7 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
           <button
             onClick={clearLogs}
             disabled={logEntries.length === 0}
-            className="p-1.5 text-gray-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1.5 text-gray-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Clear logs"
           >
             <Trash2 className="h-4 w-4" />
@@ -226,7 +232,7 @@ const ConsoleViewer: React.FC<ConsoleViewerProps> = ({
             <span>Auto-scroll: {isAutoScroll ? 'ON' : 'OFF'}</span>
             <button
               onClick={() => setIsAutoScroll(!isAutoScroll)}
-              className="text-blue-400 hover:text-blue-300"
+              className="text-blue-400 hover:text-blue-300 transition-colors"
             >
               Toggle
             </button>

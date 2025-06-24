@@ -13,7 +13,8 @@ import {
   XCircle,
   Wifi,
   WifiOff,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react';
 import BLEManager from '../utils/BLEManager';
 import HeatmapVisualization from './HeatmapVisualization';
@@ -150,6 +151,7 @@ const LeftSoleScreen: React.FC = () => {
     setTestCompleted(false);
     setPressureData([]);
     setAveragePressures(Array(8).fill(0));
+    setCurrentPressures(Array(8).fill(0));
     setConsoleLog(prev => [...prev, '[INFO] Starting 20-second measurement...']);
     setConsoleLog(prev => [...prev, '[INFO] Please stand still on the pressure sensors']);
     setConsoleLog(prev => [...prev, '[INFO] ESP32 will send pressure data via BLE']);
@@ -160,7 +162,7 @@ const LeftSoleScreen: React.FC = () => {
         const newTime = prev - 1;
         if (newTime <= 0) {
           setTimeout(() => {
-            completeTestWithAveraging();
+            completeTestWithAveraging(true); // Timer completed naturally
           }, 100);
           return 0;
         }
@@ -180,25 +182,31 @@ const LeftSoleScreen: React.FC = () => {
     setIsRecording(false);
     bleManager.current.stopDataCollection();
     
-    // When stopped early, do NOT calculate averages or complete test
+    // ✅ FIXED: Calculate averages even when stopped early
     setConsoleLog(prev => [...prev, '[INFO] Measurement stopped early by user']);
-    setConsoleLog(prev => [...prev, '[WARNING] Test incomplete - no averaged results calculated']);
     setConsoleLog(prev => [...prev, `[INFO] Collected ${pressureData.length} data points before stopping`]);
     
-    // Reset to show no pressure values (not current live values)
-    setCurrentPressures(Array(8).fill(0));
+    // Calculate averages from collected data so far
+    completeTestWithAveraging(false); // Stopped early
   };
 
-  const completeTestWithAveraging = () => {
-    console.log('Timer completed - calculating averages from', pressureData.length, 'data points');
+  const completeTestWithAveraging = (timerCompleted: boolean) => {
+    console.log(`Test ${timerCompleted ? 'completed' : 'stopped early'} - calculating averages from`, pressureData.length, 'data points');
     
     if (pressureData.length > 0) {
       calculateAverages();
       setTestCompleted(true);
-      setConsoleLog(prev => [...prev, '[INFO] ✅ 20-second measurement completed successfully!']);
+      
+      if (timerCompleted) {
+        setConsoleLog(prev => [...prev, '[INFO] ✅ 20-second measurement completed successfully!']);
+      } else {
+        setConsoleLog(prev => [...prev, '[INFO] ✅ Measurement stopped early - calculating averages from collected data']);
+      }
       setConsoleLog(prev => [...prev, '[INFO] Calculating averaged pressure values...']);
     } else {
       setConsoleLog(prev => [...prev, '[WARNING] No data collected during measurement']);
+      // Reset to show no pressure values
+      setCurrentPressures(Array(8).fill(0));
     }
     
     setIsRecording(false);
@@ -272,15 +280,39 @@ const LeftSoleScreen: React.FC = () => {
 
   const getHeatmapPressureValues = () => {
     if (testCompleted) {
-      // Only show averaged results when test is fully completed (timer reached 0)
+      // Show averaged results when test is completed (either timer finished or stopped early)
       return averagePressures;
     } else if (isRecording) {
       // Show live data during recording
       return currentPressures;
     } else {
-      // Show no pressure when not recording or when stopped early
+      // Show no pressure when not recording and no test completed
       return Array(8).fill(0);
     }
+  };
+
+  // ✅ FIXED: Console log management functions
+  const handleClearConsole = () => {
+    setConsoleLog([]);
+    setConsoleLog(prev => [...prev, '[INFO] Console cleared by user']);
+  };
+
+  const handleAddConsoleLog = (message: string, type?: 'left' | 'right' | 'system' | 'error' | 'ble') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = `[${timestamp}] ${message}`;
+    setConsoleLog(prev => [...prev, logEntry]);
+  };
+
+  // Timer animation progress calculation
+  const getTimerProgress = () => {
+    return ((20 - timeRemaining) / 20) * 100;
+  };
+
+  const getTimerColor = () => {
+    if (timeRemaining > 15) return 'text-green-400';
+    if (timeRemaining > 10) return 'text-yellow-400';
+    if (timeRemaining > 5) return 'text-orange-400';
+    return 'text-red-400';
   };
 
   return (
@@ -431,30 +463,85 @@ const LeftSoleScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* Test Controls */}
+            {/* Test Controls with Enhanced Timer Animation */}
             <div className="bg-gray-900 rounded-lg p-6 border border-gray-700">
-              <h2 className="text-xl font-medium mb-4">⏱️ 20-Second Averaging Test</h2>
+              <h2 className="text-xl font-medium mb-4 flex items-center space-x-2">
+                <Clock className="text-[#d32f2f]" size={20} />
+                <span>⏱️ 20-Second Averaging Test</span>
+              </h2>
               
               <div className="space-y-4">
                 <div className="text-center">
-                  <div className="text-4xl font-mono font-bold text-[#d32f2f]">
-                    {formatTime(timeRemaining)}
+                  {/* Enhanced Timer Display with Animations */}
+                  <div className="relative mb-4">
+                    {/* Circular Progress Ring */}
+                    <div className="relative w-32 h-32 mx-auto">
+                      <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                        {/* Background circle */}
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="50"
+                          stroke="currentColor"
+                          strokeWidth="8"
+                          fill="none"
+                          className="text-gray-700"
+                        />
+                        {/* Progress circle */}
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="50"
+                          stroke="currentColor"
+                          strokeWidth="8"
+                          fill="none"
+                          strokeDasharray={`${2 * Math.PI * 50}`}
+                          strokeDashoffset={`${2 * Math.PI * 50 * (1 - getTimerProgress() / 100)}`}
+                          className={`transition-all duration-1000 ease-linear ${
+                            isRecording ? getTimerColor() : 'text-gray-500'
+                          }`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      
+                      {/* Timer Text */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className={`text-4xl font-mono font-bold transition-colors duration-300 ${
+                          isRecording ? getTimerColor() : 'text-gray-400'
+                        }`}>
+                          {formatTime(timeRemaining)}
+                        </div>
+                      </div>
+                      
+                      {/* Pulse Animation Ring */}
+                      {isRecording && (
+                        <div className="absolute inset-0 rounded-full border-4 border-red-400 animate-ping opacity-20"></div>
+                      )}
+                    </div>
+                    
+                    {/* Status Messages */}
+                    <div className="mt-4 space-y-2">
+                      {isRecording && (
+                        <div className="text-sm text-yellow-400 animate-pulse flex items-center justify-center space-x-2">
+                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce"></div>
+                          <span>Recording live data... Stand still!</span>
+                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        </div>
+                      )}
+                      {testCompleted && (
+                        <div className="text-sm text-green-400 flex items-center justify-center space-x-2">
+                          <CheckCircle size={16} />
+                          <span>✅ Test completed - Showing averaged results</span>
+                        </div>
+                      )}
+                      {!isRecording && !testCompleted && timeRemaining < 20 && (
+                        <div className="text-sm text-orange-400 flex items-center justify-center space-x-2">
+                          <AlertTriangle size={16} />
+                          <span>⚠️ Ready for new test</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {isRecording && (
-                    <div className="text-sm text-yellow-400 mt-2">
-                      Recording live data... Stand still!
-                    </div>
-                  )}
-                  {testCompleted && (
-                    <div className="text-sm text-green-400 mt-2">
-                      ✅ Test completed - Showing averaged results
-                    </div>
-                  )}
-                  {!isRecording && !testCompleted && timeRemaining < 20 && (
-                    <div className="text-sm text-orange-400 mt-2">
-                      ⚠️ Test stopped early - No averaged results
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex space-x-2">
@@ -473,7 +560,7 @@ const LeftSoleScreen: React.FC = () => {
                     className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-2 px-4 rounded transition-colors flex items-center justify-center space-x-2"
                   >
                     <Square size={16} />
-                    <span>Stop Early</span>
+                    <span>Stop & Calculate</span>
                   </button>
                 </div>
 
@@ -485,10 +572,11 @@ const LeftSoleScreen: React.FC = () => {
                 )}
                 
                 <div className="text-xs text-gray-400 bg-gray-800 p-3 rounded">
-                  <div className="font-medium text-gray-300 mb-1">Important:</div>
-                  <div>• Averaged results only shown when full 20-second timer completes</div>
-                  <div>• Stopping early will not calculate or display averaged pressure values</div>
-                  <div>• Live data is shown during recording only</div>
+                  <div className="font-medium text-gray-300 mb-1">✅ Updated Behavior:</div>
+                  <div>• Averaged results calculated when timer completes OR when stopped early</div>
+                  <div>• Both scenarios will show averaged pressure values on heatmap</div>
+                  <div>• Live data shown during recording only</div>
+                  <div>• Enhanced timer with circular progress and animations</div>
                 </div>
               </div>
             </div>
@@ -546,9 +634,9 @@ const LeftSoleScreen: React.FC = () => {
                   Live Data
                 </span>
               )}
-              {!isRecording && !testCompleted && timeRemaining < 20 && (
-                <span className="text-sm bg-orange-900 text-orange-100 px-2 py-1 rounded-full">
-                  Test Incomplete
+              {!isRecording && !testCompleted && (
+                <span className="text-sm bg-gray-700 text-gray-300 px-2 py-1 rounded-full">
+                  Ready
                 </span>
               )}
             </h2>
@@ -567,9 +655,8 @@ const LeftSoleScreen: React.FC = () => {
             <ConsoleViewer 
               logs={consoleLog} 
               isConnected={bleConnected}
-              onAddLog={(message, type) => {
-                setConsoleLog(prev => [...prev, message]);
-              }}
+              onAddLog={handleAddConsoleLog}
+              onClearLogs={handleClearConsole}
             />
 
             {/* Export Controls */}
