@@ -110,6 +110,12 @@ const LeftSoleScreen: React.FC = () => {
         devices.forEach(device => {
           setConsoleLog(prev => [...prev, `[INFO] - ${device.name || 'Unknown Device'} (${device.id})`]);
         });
+        
+        // ✅ FIXED: Auto-connect to first real device (not demo) if available
+        const realDevice = devices.find(d => !d.id.startsWith('demo-'));
+        if (realDevice) {
+          await connectToDevice(realDevice);
+        }
       } else {
         setConsoleLog(prev => [...prev, '[INFO] No ESP32 devices found']);
       }
@@ -294,7 +300,7 @@ const LeftSoleScreen: React.FC = () => {
   // ✅ FIXED: Console log management functions
   const handleClearConsole = () => {
     setConsoleLog([]);
-    setConsoleLog(prev => [...prev, '[INFO] Console cleared by user']);
+    // Don't add a log entry immediately after clearing - it defeats the purpose
   };
 
   const handleAddConsoleLog = (message: string, type?: 'left' | 'right' | 'system' | 'error' | 'ble') => {
