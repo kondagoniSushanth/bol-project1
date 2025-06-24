@@ -5,7 +5,6 @@ class BLEManager {
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private isCollecting = false;
   private collectionInterval: NodeJS.Timeout | null = null;
-  private isDemoMode = false;
 
   public onDataReceived: ((data: number[]) => void) | null = null;
   public onConnectionChange: ((connected: boolean) => void) | null = null;
@@ -85,7 +84,6 @@ class BLEManager {
     try {
       console.log('Attempting to connect to ESP32:', device.name || 'Unknown');
       this.device = device;
-      this.isDemoMode = false;
       
       // For real BLE devices
       if (device.gatt && !device.id.startsWith('demo-')) {
@@ -112,25 +110,18 @@ class BLEManager {
         
         console.log('✅ Successfully connected to ESP32 device');
         this.onRawDataReceived?.('✅ ESP32 BLE connection established');
-        this.onConnectionChange?.(true);
-        
       } else {
         // Demo mode
         console.log('Using demo mode for device:', device.name);
         this.simulateConnection();
       }
       
+      this.onConnectionChange?.(true);
+      
     } catch (error) {
       console.error('Error connecting to ESP32:', error);
       
-      // ✅ FIXED: Don't automatically fall back to demo mode on real connection attempts
-      // Only use demo mode if explicitly requested or if it's a mock device
-      if (device.id.startsWith('demo-')) {
-        this.simulateConnection();
-        return;
-      }
-      
-      // Provide more specific error messages for real connection failures
+      // Provide more specific error messages
       if (error instanceof Error) {
         if (error.message.includes('GATT operation not permitted')) {
           throw new Error('Device connection failed. Make sure the ESP32 is advertising and not connected to another device.');
@@ -141,7 +132,10 @@ class BLEManager {
         }
       }
       
-      throw error; // Re-throw the error instead of falling back to demo mode
+      // Fall back to demo mode
+      console.log('Falling back to demo mode due to connection error');
+      this.simulateConnection();
+      this.onRawDataReceived?.('⚠️ Using demo mode - ESP32 connection failed');
     }
   }
 
@@ -151,7 +145,6 @@ class BLEManager {
       name: 'Demo ESP32 Sensor',
       gatt: null 
     } as BluetoothDevice;
-    this.isDemoMode = true;
     this.onConnectionChange?.(true);
     this.onRawDataReceived?.('🎭 Demo mode activated - simulated ESP32 data');
   }
@@ -255,7 +248,7 @@ class BLEManager {
     
     // If we have a real BLE connection, data will come via notifications
     // For demo purposes, simulate data when no real connection
-    if (this.isDemoMode || !this.characteristic) {
+    if (!this.characteristic || this.device?.id?.startsWith('demo-')) {
       this.simulateDataCollection();
     } else {
       // For real ESP32 connection, send start command if needed
@@ -302,11 +295,7 @@ class BLEManager {
   stopDataCollection(): void {
     this.isCollecting = false;
     console.log('🛑 Stopping ESP32 data collection...');
-    
-    // ✅ FIXED: Only show stop message once and don't repeat it
-    if (this.collectionInterval || this.characteristic) {
-      this.onRawDataReceived?.('🛑 Data collection stopped');
-    }
+    this.onRawDataReceived?.('🛑 Stopping data collection...');
     
     if (this.collectionInterval) {
       clearInterval(this.collectionInterval);
@@ -314,7 +303,7 @@ class BLEManager {
     }
     
     // Send stop command to ESP32 if connected
-    if (this.characteristic && !this.isDemoMode) {
+    if (this.characteristic && !this.device?.id?.startsWith('demo-')) {
       this.sendStopCommand();
     }
   }
@@ -354,13 +343,12 @@ class BLEManager {
     this.server = null;
     this.service = null;
     this.characteristic = null;
-    this.isDemoMode = false;
     
     this.onConnectionChange?.(false);
   }
 
   isConnected(): boolean {
-    if (this.isDemoMode) {
+    if (this.device?.id?.startsWith('demo-')) {
       return true; // Demo devices are always "connected"
     }
     return this.server?.connected || false;
